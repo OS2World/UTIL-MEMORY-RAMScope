@@ -1,0 +1,6 @@
+physmem.sys: physmem.obj physmem.lnk physmem.def
+ link386.exe @physmem.lnk
+ mapsym -aln physmem.map
+
+physmem.obj: physmem.asm
+ alp -Mb +Fl -Lr -Lf +Ls -Llp:0 -LcX -LcY -LcC -LcF $?

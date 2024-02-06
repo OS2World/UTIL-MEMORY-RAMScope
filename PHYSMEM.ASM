@@ -1,8 +1,9 @@
 ;**********************************************************************
 ;*                                                                    *
 ;*                         FARPOINT SOFTWARE                          *
+;*                  modified to work under 32-bit OS/2                *
 ;*                         -----------------                          *
-;*                     physmem.asm * version 1.11                     *
+;*                     physmem.asm * version 1.12                     *
 ;*                                                                    *
 ;*                                                                    *
 ;*  A device driver whose purpose is to provide a means for an        *
@@ -53,14 +54,16 @@
 ;*                                                                    *
 ;**********************************************************************
 
-.286p
-.SEQ
+.686p
 
-	extrn	DosWrite:far
+	extrn	DosWrite:far16
 
 ;-------------------------------------------
 
-ADATA	SEGMENT	PARA PUBLIC 'AUTO'
+ADATA	SEGMENT	PARA PUBLIC USE16 'DATA'
+PUBLIC nexthdr
+PUBLIC gdt_phys
+PUBLIC idt_phys
 
 nexthdr		dd	0FFFFFFFFh        ;pointer to next device driver
 devattr		dw	8140h             ;attribute flags
@@ -71,14 +74,23 @@ reserv2		db	8 dup (0)
 
 devhelp		dd	0         ;this is where we save the DevHelp pointer
 
+; align memory location for "sgdt" as suggested in Intel SW Developer manual
+ALIGN 4
+dummy1    dw  1 dup (0)
 gdt_phys	dw	3 dup (0)         ;scratch memory for GDT
+; align memory location for "sidt" as suggested in Intel SW Developer manual
+ALIGN 4
+dummy2    dw  1 dup (0)
 idt_phys	dw	3 dup (0)         ;scratch memory for IDT
+; a pagelist with one pagerange entry: 1 DWORD of physical base addr, 1 DWORD for pagerange length
+pagelist  dd  2 dup (0)
 
 end_of_data	label	byte              ;the rest isn't needed after init
 
 initmsg		db	0Dh,0Ah
 		db	'Absolute Physical Memory Access Device Driver',0Dh,0Ah
-		db	'Version 1.11 * Copyright (c) 1988, Farpoint Software',0Dh,0Ah
+		db	'Version 1.12 * Copyright (c) 1988, Farpoint Software',0Dh,0Ah
+    db  'modified to work under 32-bit OS/2',0Dh,0Ah
 		db	0Dh,0Ah
 initmsglen	equ	$-offset initmsg
 byteswritten	dw	0
@@ -89,7 +101,7 @@ DGROUP	GROUP	ADATA
 
 ;-------------------------------------------
 
-CODE	SEGMENT	PARA	'CODE'
+CODE	SEGMENT	PARA PUBLIC USE16	'CODE'
 
 	ASSUME	CS:CODE,DS:ADATA
 
@@ -113,18 +125,22 @@ initializej:	jmp	initialize
 ; * * * generic IOCtl command * * *
 
 generic_ioctl:
-
 	;check the function code:
 
 	mov	al,es:[bx+14]
 	cmp	al,40h                 ;translate physical to virtual
+  ; PhysToUVirt under 32-bit OS/2 does not seem to handle well
+  ; a length of 0 (meaning: 65536 bytes)
+  ; we therefore map this maximum minus one page length: 65536-4096 = 61440 bytes
+  ; for the case where the requested physical address does not align on a page boundary
+  mov cx,61440
 	je	acquire
 	cmp	al,41h                 ;release virtual selector acquired
-		                       ; previously with 40h, 42h, or 43h
+		                         ; previously with 40h, 42h, or 43h
 	je	releasej
 	cmp	al,42h                 ;get global descriptor table
 	je	acquire_gdt
-	cmp	al,43h                 ;get local descriptor table
+	cmp	al,43h                 ;get interrupt descriptor table
 	je	acquire_idt
 
 	;return error if not recognized
@@ -138,21 +154,22 @@ releasej:
 acquire:
 	push	es
 	push	bx
+  push  si
 	push	ds
 	lds	si,dword ptr es:[bx+15]    ;read physical address from
-		                           ; the request packet
+		                             ; the request packet
 	mov	ax,[si+2]
 	mov	bx,[si]
 	pop	ds
-	mov	cx,0
-	mov	dh,0                   ;request type 0, get selector for
-		                       ; readable / executable segment
-	mov	dl,17h             ;index for PhysToUVirt
+	mov	dh,0                        ;request type 0, get selector for
+		                              ; readable / executable segment
+	mov	dl,17h                      ;index for PhysToUVirt
 	call	devhelp
 	jnc	acquire_good
 
 	;error exit
 
+  pop si
 	pop	bx
 	pop	es
 	mov	word ptr es:[bx+3],0C113h
@@ -163,43 +180,99 @@ acquire:
 acquire_good:
 	mov	ax,es
 	mov	dx,bx
+  pop si
 	pop	bx
 	pop	es
+
+  push  si
 	push	ds
 	lds	si,dword ptr es:[bx+19]    ;put result into request packet
 	mov	[si+2],ax
 	mov	[si],dx
 	pop	ds
+  pop si
 
 	mov	word ptr es:[bx+3],0100h    ;set the "done" flag
 	ret
 
 acquire_gdt:
 
+  db 66h
 	sgdt	fword ptr gdt_phys     ;store GDT register - this instruction
-		                       ; can only be executed in ring zero
+		                           ; can only be executed in ring zero
+
+  ; OS/2 32-bit uses paging:
+  ; determine the physical address from the linear address
+  ; subsequently, we only map 256 bytes
+  ; (that's what the main executable displays in the window)
+  ; and therefore one pagerange entry in the pagelist is sufficient
+  ; be aware that the GDT might be physically NON-CONTIGUOUS in memory
+  ; which might lead to wrong conclusions when viewing it in the
+  ; application
 	push	es
+  push ebx
+  push esi
+  push edi
+  mov   ax,SEG pagelist
+  lea   esi,pagelist
+  mov   dl,5Bh
+  call devhelp                  ; VirtToLin
+  mov  edi,eax
+  mov   eax,dword ptr [gdt_phys+2]
+  mov  ecx,256
+  push ecx
+  mov  dl,5Eh                   ; LinToPageList
+  call devhelp
+  pop  ecx
+
 	les	si,dword ptr es:[bx+15]    ;put physical address into packet
-	mov	ax,gdt_phys+2
-	mov	es:[si],ax
-	mov	ax,gdt_phys+4
-	and	ax,00FFh
-	mov	es:[si+2],ax
+  mov eax,dword ptr [pagelist]
+  mov dword ptr es:[si],eax
+
+  pop edi
+  pop esi
+  pop ebx
 	pop	es
 
 	jmp	acquire                ;proceed with translation to virtual
 
 acquire_idt:
 
+  db 66h
 	sidt	fword ptr idt_phys     ;store IDT register - this instruction
 		                       ; can only be executed in ring zero
+
+  ; OS/2 32-bit uses paging:
+  ; determine the physical address from the linear address
+  ; subsequently, we only map 256 bytes
+  ; (that's what the main executable displays in the window)
+  ; and therefore one pagerange entry in the pagelist is sufficient
+  ; be aware that the IDT might be physically NON-CONTIGUOUS in memory
+  ; which might lead to wrong conclusions when viewing it in the
+  ; application
 	push	es
+  push ebx
+  push esi
+  push edi
+  mov   ax,SEG pagelist
+  lea   esi,pagelist
+  mov   dl,5Bh
+  call devhelp                  ; VirtToLin
+  mov  edi,eax
+  mov  eax,dword ptr [idt_phys+2]
+  mov  ecx,256
+  push ecx
+  mov  dl,5Eh                   ; LinToPageList
+  call devhelp
+  pop  ecx
+
 	les	si,dword ptr es:[bx+15]    ;put physical address into packet
-	mov	ax,idt_phys+2
-	mov	es:[si],ax
-	mov	ax,idt_phys+4
-	and	ax,00FFh
-	mov	es:[si+2],ax
+  mov eax,dword ptr [pagelist]
+  mov dword ptr es:[si],eax
+
+  pop edi
+  pop esi
+  pop ebx
 	pop	es
 
 	jmp	acquire                ;proceed with translation to virtual
@@ -259,8 +332,8 @@ initialize:
 
 	;set ending offsets
 
-	mov	word ptr es:[bx+14],offset end_of_code
-	mov	word ptr es:[bx+16],offset end_of_data
+	mov	word ptr es:[bx+14],offset end_of_code-1
+	mov	word ptr es:[bx+16],offset end_of_data-1
 
 	;set other req packet fields
 

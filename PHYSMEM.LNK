@@ -1,5 +1,5 @@
-physmem.obj
-physmem.exe
-nul
-os2.lib
+/NOLOGO /BAT /MAP:full physmem.obj
+physmem.sys
+physmem.map
+os2286.lib
 physmem.def
