@@ -1,0 +1,205 @@
+            ษอออออออออออออออออออออออออออออออออออออออออออออออออป
+            บ                                                 บ
+            บ            >>> R A M S C O P E <<<              บ
+            บ        Absolute Physical Memory Viewer          บ
+            บ   Copyright (c) 1988, 1989  Farpoint Software   บ
+            บ                  Version 2.0                    บ
+            บ     -------------------------------------       บ
+            บ                                                 บ
+            บ               A debugging tool                  บ
+            บ       for the OS/2 Presentation Manager         บ
+            บ                                                 บ
+            ศอออออออออออออออออออออออออออออออออออออออออออออออออผ
+
+
+Introduction
+------------
+
+RamScope is a debugging tool written specifically for the OS/2 Presentation
+Manager. Its purpose is to allow you to do something that is not normally
+allowed for a "user" (i.e. ring 2 or ring 3) program: You can roam freely
+through all of the system's physical memory space without regard for segment
+limits, access privilege, or descriptor tables.
+
+There are three active areas of the RamScope display: The left side of the
+window shows the starting address in hex of each line of data. These addresses
+are always expressed as true physical memory locations. The middle section
+of the window shows sixteen lines of sixteen bytes each in hex format. The
+right-hand section of the window shows the same data area in character format
+rather than hex.
+
+The displayed memory area is "live"; i.e. the memory block is re-read and the
+display is updated about six times per second. Therefore, if an area of memory
+is actively changing, this activity can be visually monitored. The updating
+of the display can be stopped (frozen) with a single-keystroke command.
+
+It is possible to run multiple copies of RamScope simultaneously in order to
+monitor multiple separate areas of memory.
+
+
+Operating Instructions
+----------------------
+
+All the display manipulation commands are accessible both with the mouse and
+as "accelerator" keys. Each command will be described individually.
+
+Specify address <Ctrl-A>:
+    This produces a dialog box into which the desired starting address of the
+    display area may be entered. As always, the address must be in hex and
+    must be expressed as a physical address.
+
+Scan Forward <Ctrl-F>:
+    This causes the start address of the displayed memory area to be increased
+    by 10 hex at each update interval (about 6 Hz), allowing a "hands-off"
+    visual search through memory. The scan can be stopped with <F8> or <F9>.
+
+Scan Backward <Ctrl-B>:
+    Same as Scan Forward, except that 10 hex is subtracted from the starting
+    address each update interval.
+
+ฺฤ
+ณSubtract 1000 hex   <Home>:
+ณ     Add 1000 hex    <End>:
+ณSubtract 100 hex    <PgUp>:
+ณ     Add 100 hex    <PgDn>:
+ณSubtract 10 hex <Up-arrow>:
+ณ     Add 10 hex <Dn-arrow>:
+ณSubtract 1    <Left-arrow>:
+ณ     Add 1   <Right-arrow>:
+ภฤ
+    All of these perform the indicated action on the starting address of the
+    displayed memory area.
+
+Find Global Descriptor Table <Ctrl-G>:
+    Sets the display start address to the address of the system's global
+    descriptor table. This is the master descriptor table used by the
+    system kernel. User programs always operate through their individual
+    Local Descriptor Tables, not the GDT.
+
+Find Interrupt Descriptor Table <Ctrl-I>:
+    Sets the display start address to the address of the system hardware
+    interrupt descriptor table. All hardware and software interrupts are
+    vectored through this table.
+
+Find Text String <Ctrl-T>:
+    Produces a dialog box into which may be entered: a text string to be
+    searched for, a starting memory address, and an ending memory address.
+    The specified area is searched for an exact match to the text string.
+    If a match is found, then the starting address for the display area
+    is set to the address of the matching string.
+
+Find Hex Byte Sequence <Ctrl-H>:
+    This works the same way as "Find Text String", except that the data to
+    be searched for is entered in hex.
+
+Find Next Text String <Ctrl-N>:
+    Finds the text string previously specified, with the search starting at
+    the currently displayed address + 1.
+
+Find Next Hex Byte Sequence <Ctrl-X>:
+    Finds the hex sequence previously specified, with the search starting at
+    the currently displayed address + 1.
+
+Stop Scan <F8>:
+    Stops the auto-incrementing or auto-decrementing started by one of the
+    "Scan" commands. The display continues to refresh at 6 Hz.
+
+Freeze <F9>:
+    Stops the display refresh process. If the content of the memory area
+    changes, this will NOT be reflected in the display. It will continue to
+    show conditions present at the time <F9> was pressed. If a scan was in
+    progress, it will be stopped.
+
+UnFreeze <F10>:
+    Restores the display refresh, previously stopped by "Freeze".
+
+About <F1>:
+    Produces a dialog box containing a short description of RamScope and
+    a copyright notice.
+
+
+Changes in Version 1.1
+-----------------------------
+    The "find next" functions and pull-down menu shadow boxes (just to be
+    fancy). The search routine has been modified to reduce the probability
+    of falsing while searching through areas of non-existant memory
+    (floating bus).
+
+
+Changes in Version 2.0:
+-----------------------
+    This version runs correctly under the IBM release of OS/2 version 1.1
+    (the previous versions of RamScope ran only under Microsoft's SDK 1.05).
+    A change in the message sequence sent to submenus required a more
+    clunky (and slow) method of creating those cute shadow boxes, so they
+    have been removed.
+
+
+Installation
+------------
+
+In order to do its magic, RamScope needs its own device driver so that
+privilege level zero code can be executed. This device driver is supplied
+as PHYSMEM.SYS. Installation of the device driver proceeds as follows:
+ (1) Copy the file PHYSMEM.SYS into the root directory of the boot (C:) drive.
+ (2) Edit CONFIG.SYS in the root directory. Insert the following line
+     anywhere in the file:
+
+                           DEVICE=C:\PHYSMEM.SYS
+
+ (3) Reboot the system.
+
+PHYSMEM won't bother anything else in the system, and it only uses 1k.
+
+To start RamScope, either type its name at an OS/2 command line prompt, or
+install it as an entry in the Program Starter. It takes no command line
+parameters. The working directory is irrelevant. The program type is
+"Presentation Manager", not "Other".
+
+Since the default configuration of OS/2 allows memory segments to be moved,
+discarded, and swapped to disk whenever the kernel code deems appropriate,
+using RamScope could be a little tricky under some conditions. The data
+segment you were watching could unexpectedly disappear from memory or
+move to another location. To prevent this, change the MEMMAN line in
+CONFIG.SYS from "MEMMAN=SWAP,MOVE" to "MEMMAN=NOSWAP,NOMOVE". Normally,
+this is unnecessary unless you are either short on memory or run a lot of
+other programs while debugging. Be sure to restore CONFIG.SYS to its
+normal state when not debugging.
+
+
+PHYSMEM source code
+-------------------
+
+The complete source code to the PHYSMEM device driver is included in this
+package as an example of a simple non-interrupt device driver. PHYSMEM does
+not in fact drive a device at all, but rather is a means by which a ring 3
+program can call ring zero code. Examples of how to call the driver are
+shown in the comment block at the beginning of PHYSMEM.ASM.
+
+
+OS/2 Bug Note:
+--------------
+
+Any "accelerator" keys which are combinations of the control key and a
+letter key (such as ^A to set the address) will not work if Caps Lock is
+in effect. Just be sure to turn off Caps Lock if you are using keyboard
+commands. The function keys F1 thru F12 are not affected.
+
+
+SHAREWARE NOTICE
+----------------
+
+Please remember that RamScope is Shareware, not free software. It costs $35.
+For this you get: A version that doesn't start up with the About Box, support
+via telephone or CompuServe, a few other small-but-useful OS/2 programs,
+and free updates whenever they become available. If you're  going to use
+this program, please pay for it. In any event, give copies of the unregistered
+version to all takers. Thanks for your support. Shareware publishers would
+starve without it.
+
+Our mailing address is:
+                        Farpoint Software
+                        2501 Afton Court
+                        League City, Texas 77573
+
+Messages may be sent through Compuserve E-mail to:  Alan Jones [74030,554].

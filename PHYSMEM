@@ -1,0 +1,7 @@
+physmem.obj: physmem.asm
+ masm physmem,physmem,nul,nul;
+
+physmem.exe: physmem.obj physmem.lnk physmem.def
+ link @physmem.lnk
+ copy physmem.exe physmem.sys
+ del physmem.exe

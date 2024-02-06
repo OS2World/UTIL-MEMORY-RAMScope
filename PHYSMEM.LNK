@@ -1,0 +1,5 @@
+physmem.obj
+physmem.exe
+nul
+os2.lib
+physmem.def
